@@ -5,14 +5,14 @@ import telebot
 from flask import Flask
 import google.generativeai as genai
 
-# Keys
+# Tokens & Sabuwar API Key
 TELEGRAM_TOKEN = "8662812194:AAHQcaN89G9vv8uQNWpiSjgCJuAwWMwg4ns"
-GEMINI_API_KEY = "AIzaSyDwuD4RYY8mUJ1mCEWAPRItVG-bystuRVw"
+GEMINI_API_KEY = "AIzaSyAsH6FYezYDYaWiYWv7W5AF1Xgm5Ansv5Q"
 
-# Configure Gemini API
+# Configure Gemini API da Sabuwar Key
 genai.configure(api_key=GEMINI_API_KEY)
 
-# Gano Model din da yake aiki a API Key dinka
+# Auto-detect wanda yake aiki a cikin sabuwar key din
 ACTIVE_MODEL = None
 try:
     for m in genai.list_models():
