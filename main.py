@@ -1,31 +1,13 @@
-import os
+ import os
 import threading
 import time
+import requests
 import telebot
 from flask import Flask
-import google.generativeai as genai
 
-# Tokens & Sabuwar API Key
 TELEGRAM_TOKEN = "8662812194:AAHQcaN89G9vv8uQNWpiSjgCJuAwWMwg4ns"
-GEMINI_API_KEY = "AIzaSyAsH6FYezYDYaWiYWv7W5AF1Xgm5Ansv5Q"
-
-# Configure Gemini API da Sabuwar Key
-genai.configure(api_key=GEMINI_API_KEY)
-
-# Auto-detect wanda yake aiki a cikin sabuwar key din
-ACTIVE_MODEL = None
-try:
-    for m in genai.list_models():
-        if 'generateContent' in m.supported_generation_methods:
-            ACTIVE_MODEL = m.name
-            break
-except Exception as e:
-    print(f"Error finding model: {e}")
-
-if not ACTIVE_MODEL:
-    ACTIVE_MODEL = "gemini-1.5-flash"
-
-model = genai.GenerativeModel(ACTIVE_MODEL)
+# Karanta Key din daga Render Environment
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
@@ -56,16 +38,34 @@ def generate_music_content(message):
     bot.send_chat_action(message.chat.id, 'typing')
     user_prompt = message.text
 
+    # Hanyar Direct HTTP Request zuwa API v1
+    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
+    
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {"text": f"{STUDIO_PROMPT}\n\nUser Request: {user_prompt}"}
+                ]
+            }
+        ]
+    }
+    
+    headers = {'Content-Type': 'application/json'}
+
     try:
-        full_prompt = f"{STUDIO_PROMPT}\n\nUser request: {user_prompt}"
-        response = model.generate_content(full_prompt)
+        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        res_data = response.json()
         
-        if response.text:
-            bot.reply_to(message, response.text)
+        if "candidates" in res_data and len(res_data["candidates"]) > 0:
+            ai_reply = res_data["candidates"][0]["content"]["parts"][0]["text"]
+            bot.reply_to(message, ai_reply)
         else:
-            bot.reply_to(message, "An samu matsala wajen samun amsa. Sake gwada aikawa.")
+            error_msg = res_data.get("error", {}).get("message", "Ba a samu sakamako daga AI ba.")
+            bot.reply_to(message, f"An samu matsala daga AI Server:\n`{error_msg}`", parse_mode="Markdown")
+            
     except Exception as e:
-        bot.reply_to(message, f"Matsala ta faru: {str(e)}")
+        bot.reply_to(message, "An samu matsala ta haɗin yanar gizo. Sake gwada aikawa.")
 
 def run_bot():
     try:
@@ -81,7 +81,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return f"Hausa AI Music Studio Bot Yana Aiki! Active Model: {ACTIVE_MODEL}"
+    return "Hausa AI Music Studio Bot Yana Aiki!"
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
