@@ -1,4 +1,4 @@
-import os
+ import os
 import threading
 import time
 import requests
@@ -37,8 +37,8 @@ def generate_music_content(message):
     bot.send_chat_action(message.chat.id, 'typing')
     user_prompt = message.text
 
-    # Gyara: Amfani da v1beta da gemini-1.5-flash
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+    # Sauya zuwa gemini-2.5-flash
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
     
     payload = {
         "contents": [
