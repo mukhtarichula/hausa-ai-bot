@@ -1,75 +1,232 @@
 import os
-import threading
 import time
+import threading
+
 import telebot
 from flask import Flask
-import google.generativeai as genai
+from google import genai
 
-TELEGRAM_TOKEN = "8662812194:AAHQcaN89G9vv8uQNWpiSjgCJuAwWMwg4ns"
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-genai.configure(api_key=GEMINI_API_KEY)
+# ======================
+# ENV VARIABLES
+# ======================
 
-# Sakamakon sa sabon model mai aiki a account dinka
-model = genai.GenerativeModel("gemini-2.5-flash")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-bot = telebot.TeleBot(TELEGRAM_TOKEN)
+
+if not TELEGRAM_TOKEN:
+    raise ValueError("Missing TELEGRAM_TOKEN")
+
+if not GEMINI_API_KEY:
+    raise ValueError("Missing GEMINI_API_KEY")
+
+
+# ======================
+# GEMINI SETUP
+# ======================
+
+client = genai.Client(
+    api_key=GEMINI_API_KEY
+)
+
+
+model_name = "gemini-2.5-flash"
+
+
+# ======================
+# TELEGRAM SETUP
+# ======================
+
+bot = telebot.TeleBot(
+    TELEGRAM_TOKEN,
+    parse_mode="HTML"
+)
+
+
+# ======================
+# AI ROLE
+# ======================
 
 STUDIO_PROMPT = """
-Kai kwararren mawaki ne kuma mai sarrafa kida (Music Producer/Lyricist) a HAUSA AI STUDIO. 
-Aikin ka shine taimaka wa mutane wajen rubuta baitukan wakoki (lyrics) masu sauti da ratsa zuciya a harshen Hausa ko Turanci, da kuma tsara musu "Suno/Udio Prompt" na salon kida (Music Style) kamar Latin Pop, Reggaeton, Afrobeat, Trap, dss.
 
-Duk lokacin da mai amfani ya aiko da ma'ana ko jigon wakar da yake so:
-1. Ka tsara masa Structure na wakar: [Verse 1], [Chorus], [Verse 2], [Outro].
-2. Ka ba shi Music Style Prompt (a Turanci) wanda zai kora a Suno AI ko Udio.
-3. Yi magana cikin girmamawa da sigar kwararren Studio Producer a cikin Hausa.
+Kai ne HAUSA AI MUSIC STUDIO,
+kwararren Music Producer, Song Writer da Lyricist.
+
+Aikinka:
+- Rubuta lyrics masu zurfi a Hausa ko Turanci.
+- Ka tsara wakar da structure:
+[Verse 1]
+[Chorus]
+[Verse 2]
+[Bridge]
+[Outro]
+
+- Ka samar da Suno AI / Udio music prompt a Turanci.
+- Ka bada shawarar:
+  * Genre
+  * Mood
+  * Instruments
+  * Vocal style
+
+Yi magana da Hausa cikin salon professional studio producer.
+
 """
 
-@bot.message_handler(commands=['start', 'help'])
-def send_welcome(message):
-    welcome_text = (
-        "🎵 **Barka da zuwa HAUSA AI MUSIC STUDIO BOT!** 🎵\n\n"
-        "Ina taimaka muku wajen:\n"
-        "✨ Rubuta baitukan waka (Lyrics) a cikin Hausa & Turanci.\n"
-        "🎶 Tsara Prompts na kida (Reggaeton, Latin Pop, Afrobeat, dss.) don Suno/Udio AI.\n\n"
-        "Yadda zakayi amfani dani:\n"
-        "Rubuta jigon wakar da kake so ko salon kidan da kake muradi."
-    )
-    bot.reply_to(message, welcome_text, parse_mode="Markdown")
 
-@bot.message_handler(func=lambda message: True)
-def generate_music_content(message):
-    bot.send_chat_action(message.chat.id, 'typing')
-    user_prompt = message.text
+# ======================
+# COMMANDS
+# ======================
+
+@bot.message_handler(commands=["start", "help"])
+def welcome(message):
+
+    text = """
+🎵 <b>HAUSA AI MUSIC STUDIO BOT</b> 🎵
+
+
+Ni ina taimaka maka wajen:
+
+🎤 Rubuta Lyrics
+🎶 Kirkirar Music Style Prompt
+🔥 Suno AI / Udio Prompt
+🌍 Hausa & English songs
+
+
+Aiko min da:
+- Jigon wakarka
+- Sunan artist style
+- Salon kida da kake so
+
+
+Misali:
+"Rubuta min waka ta soyayya irin Afrobeat"
+"""
+
+    bot.reply_to(message, text)
+
+
+
+# ======================
+# AI GENERATION
+# ======================
+
+@bot.message_handler(func=lambda m: True)
+def generate(message):
+
+    bot.send_chat_action(
+        message.chat.id,
+        "typing"
+    )
+
+    user_text = message.text
+
 
     try:
-        full_prompt = f"{STUDIO_PROMPT}\n\nUser request: {user_prompt}"
-        response = model.generate_content(full_prompt)
-        
-        if response.text:
-            bot.reply_to(message, response.text)
-        else:
-            bot.reply_to(message, "Ba a samu sakamako ba. Sake gwada aikawa.")
-    except Exception as e:
-        bot.reply_to(message, f"Matsala ta faru: {str(e)}")
 
-def run_bot():
+        prompt = f"""
+{STUDIO_PROMPT}
+
+
+User request:
+
+{user_text}
+
+"""
+
+
+        result = client.models.generate_content(
+            model=model_name,
+            contents=prompt
+        )
+
+
+        if result.text:
+
+            bot.reply_to(
+                message,
+                result.text
+            )
+
+        else:
+
+            bot.reply_to(
+                message,
+                "Ban samu amsa ba. Ka sake gwadawa."
+            )
+
+
+    except Exception as e:
+
+        print(e)
+
+        bot.reply_to(
+            message,
+            "An samu matsala wajen hada AI. Ka sake gwadawa."
+        )
+
+
+
+# ======================
+# BOT THREAD
+# ======================
+
+def start_bot():
+
     while True:
+
         try:
-            bot.remove_webhook()
-            time.sleep(1)
-            bot.polling(none_stop=True, interval=2, timeout=20)
-        except Exception:
+
+            print("Bot yana aiki...")
+
+            bot.infinity_polling(
+                timeout=60,
+                long_polling_timeout=60
+            )
+
+
+        except Exception as e:
+
+            print(
+                "Bot error:",
+                e
+            )
+
             time.sleep(5)
 
-threading.Thread(target=run_bot, daemon=True).start()
+
+
+threading.Thread(
+    target=start_bot,
+    daemon=True
+).start()
+
+
+
+# ======================
+# FLASK SERVER
+# ======================
 
 app = Flask(__name__)
 
-@app.route('/')
+
+@app.route("/")
 def home():
-    return "Hausa AI Music Studio Bot Yana Aiki!"
+
+    return "HAUSA AI MUSIC STUDIO BOT ONLINE"
+
+
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+
+    port = int(
+        os.getenv(
+            "PORT",
+            5000
+        )
+    )
+
+    app.run(
+        host="0.0.0.0",
+        port=port
+    )
