@@ -9,7 +9,6 @@ TELEGRAM_TOKEN = "8662812194:AAHQcaN89G9vv8uQNWpiSjgCJuAwWMwg4ns"
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("gemini-1.5-flash")
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
@@ -22,6 +21,18 @@ Duk lokacin da mai amfani ya aiko da ma'ana ko jigon wakar da yake so:
 2. Ka ba shi Music Style Prompt (a Turanci) wanda zai kora a Suno AI ko Udio.
 3. Yi magana cikin girmamawa da sigar kwararren Studio Producer a cikin Hausa.
 """
+
+def get_active_model():
+    """Nemo model ɗin da yake aiki a cikin account ɗinka kai tsaye"""
+    try:
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                # Da zarar an samu model mai aiki, a yi amfani da shi
+                return genai.GenerativeModel(m.name)
+    except Exception:
+        pass
+    # Fallback idan har an samu matsalar listing
+    return genai.GenerativeModel("gemini-1.5-flash-latest")
 
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
@@ -41,8 +52,10 @@ def generate_music_content(message):
     user_prompt = message.text
 
     try:
+        active_model = get_active_model()
         full_prompt = f"{STUDIO_PROMPT}\n\nUser request: {user_prompt}"
-        response = model.generate_content(full_prompt)
+        response = active_model.generate_content(full_prompt)
+        
         if response.text:
             bot.reply_to(message, response.text)
         else:
