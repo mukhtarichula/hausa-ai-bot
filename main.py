@@ -3,14 +3,17 @@ import threading
 import time
 import telebot
 from flask import Flask
-from google import genai
+import google.generativeai as genai
 
 # Keys
 TELEGRAM_TOKEN = "8662812194:AAHQcaN89G9vv8uQNWpiSjgCJuAwWMwg4ns"
 GEMINI_API_KEY = "AIzaSyDwuD4RYY8mUJ1mCEWAPRItVG-bystuRVw"
 
+# Configure Gemini API
+genai.configure(api_key=GEMINI_API_KEY)
+model = genai.GenerativeModel('gemini-1.5-flash')
+
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
-client = genai.Client(api_key=GEMINI_API_KEY)
 
 STUDIO_PROMPT = """
 Kai kwararren mawaki ne kuma mai sarrafa kida (Music Producer/Lyricist) a HAUSA AI STUDIO. 
@@ -40,11 +43,9 @@ def generate_music_content(message):
     user_prompt = message.text
 
     try:
-        # Amfani da sabon model din da Google suka buƙata
-        response = client.models.generate_content(
-            model='gemini-3.6-flash',
-            contents=f"{STUDIO_PROMPT}\n\nUser request: {user_prompt}"
-        )
+        full_prompt = f"{STUDIO_PROMPT}\n\nUser request: {user_prompt}"
+        response = model.generate_content(full_prompt)
+        
         if response.text:
             bot.reply_to(message, response.text)
         else:
