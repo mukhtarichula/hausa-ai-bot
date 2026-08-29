@@ -11,7 +11,21 @@ GEMINI_API_KEY = "AIzaSyDwuD4RYY8mUJ1mCEWAPRItVG-bystuRVw"
 
 # Configure Gemini API
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
+
+# Gano Model din da yake aiki a API Key dinka
+ACTIVE_MODEL = None
+try:
+    for m in genai.list_models():
+        if 'generateContent' in m.supported_generation_methods:
+            ACTIVE_MODEL = m.name
+            break
+except Exception as e:
+    print(f"Error finding model: {e}")
+
+if not ACTIVE_MODEL:
+    ACTIVE_MODEL = "gemini-1.5-flash"
+
+model = genai.GenerativeModel(ACTIVE_MODEL)
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
@@ -67,7 +81,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Hausa AI Music Studio Bot Yana Aiki!"
+    return f"Hausa AI Music Studio Bot Yana Aiki! Active Model: {ACTIVE_MODEL}"
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
