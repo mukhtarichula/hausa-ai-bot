@@ -40,8 +40,9 @@ def generate_music_content(message):
     user_prompt = message.text
 
     try:
+        # Amfani da sabon model din da Google suka buƙata
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-3.6-flash',
             contents=f"{STUDIO_PROMPT}\n\nUser request: {user_prompt}"
         )
         if response.text:
