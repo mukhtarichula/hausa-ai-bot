@@ -4,9 +4,9 @@ import requests
 import telebot
 from flask import Flask
 
-# Karanta keys daga Environment Variables don tsaro
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+# Sirrin aikace-aikace
+TELEGRAM_TOKEN = "8662812194:AAHQcaN89G9vv8uQNWpiSjgCJuAwWMwg4ns"
+GEMINI_API_KEY = "AIzaSyDwuD4RYY8mUJ1mCEWAPRItVG-bystuRVw"
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
@@ -23,14 +23,14 @@ Duk lokacin da mai amfani ya aiko da ma'ana ko jigon wakar da yake so:
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
     welcome_text = (
-        "🎵 Barka da zuwa HAUSA AI MUSIC STUDIO BOT! 🎵\n\n"
+        "🎵 **Barka da zuwa HAUSA AI MUSIC STUDIO BOT!** 🎵\n\n"
         "Ina taimaka muku wajen:\n"
         "✨ Rubuta baitukan waka (Lyrics) a cikin Hausa & Turanci.\n"
         "🎶 Tsara Prompts na kida (Reggaeton, Latin Pop, Afrobeat, dss.) don Suno/Udio AI.\n\n"
         "Yadda zakayi amfani dani:\n"
         "Rubuta jigon wakar da kake so ko salon kidan da kake muradi."
     )
-    bot.reply_to(message, welcome_text)
+    bot.reply_to(message, welcome_text, parse_mode="Markdown")
 
 @bot.message_handler(func=lambda message: True)
 def generate_music_content(message):
@@ -53,7 +53,7 @@ def generate_music_content(message):
         
         if "candidates" in res_data and len(res_data["candidates"]) > 0:
             ai_reply = res_data["candidates"][0]["content"]["parts"][0]["text"]
-            bot.reply_to(message, ai_reply)
+            bot.reply_to(message, ai_reply, parse_mode="Markdown")
         else:
             bot.reply_to(message, "An samu matsala wajen samun amsa daga AI. Da fatan zaka sake aikawa.")
     except Exception:
