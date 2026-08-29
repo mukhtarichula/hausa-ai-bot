@@ -6,7 +6,6 @@ import telebot
 from flask import Flask
 
 TELEGRAM_TOKEN = "8662812194:AAHQcaN89G9vv8uQNWpiSjgCJuAwWMwg4ns"
-# Karanta Key din daga Render Environment
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
@@ -38,7 +37,6 @@ def generate_music_content(message):
     bot.send_chat_action(message.chat.id, 'typing')
     user_prompt = message.text
 
-    # Hanyar Direct HTTP Request zuwa API v1
     url = f"https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
     
     payload = {
@@ -68,12 +66,13 @@ def generate_music_content(message):
         bot.reply_to(message, "An samu matsala ta haɗin yanar gizo. Sake gwada aikawa.")
 
 def run_bot():
-    try:
-        bot.remove_webhook()
-        time.sleep(1)
-    except Exception:
-        pass
-    bot.infinity_polling(skip_pending=True)
+    while True:
+        try:
+            bot.remove_webhook()
+            time.sleep(1)
+            bot.polling(none_stop=True, interval=2, timeout=20)
+        except Exception as e:
+            time.sleep(5)
 
 threading.Thread(target=run_bot, daemon=True).start()
 
