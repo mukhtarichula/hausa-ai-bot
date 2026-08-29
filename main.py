@@ -4,8 +4,9 @@ import requests
 import telebot
 from flask import Flask
 
-TELEGRAM_TOKEN = "8662812194:AAHQcaN89G9vv8uQNWpiSjgCJuAwWMwg4ns"
-GEMINI_API_KEY = "AIzaSyDwuD4RYY8mUJ1mCEWAPRItVG-bystuRVw"
+# Karanta keys daga Environment Variables don tsaro
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
@@ -27,7 +28,7 @@ def send_welcome(message):
         "✨ Rubuta baitukan waka (Lyrics) a cikin Hausa & Turanci.\n"
         "🎶 Tsara Prompts na kida (Reggaeton, Latin Pop, Afrobeat, dss.) don Suno/Udio AI.\n\n"
         "Yadda zakayi amfani dani:\n"
-        "Rubuta jigon wakar da kake so ko salon kidan da kake muradi (misali: Rubuta min wakar soyayya mai salon Reggaeton da Hausa)."
+        "Rubuta jigon wakar da kake so ko salon kidan da kake muradi."
     )
     bot.reply_to(message, welcome_text)
 
@@ -55,8 +56,8 @@ def generate_music_content(message):
             bot.reply_to(message, ai_reply)
         else:
             bot.reply_to(message, "An samu matsala wajen samun amsa daga AI. Da fatan zaka sake aikawa.")
-    except Exception as e:
-        bot.reply_to(message, f"An samu matsala ta connection. Sake gwada aikawa.")
+    except Exception:
+        bot.reply_to(message, "An samu matsala ta connection. Sake gwada aikawa.")
 
 def run_bot():
     bot.infinity_polling(skip_pending=True)
