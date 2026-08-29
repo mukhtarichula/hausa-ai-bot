@@ -1,12 +1,15 @@
 import os
 import threading
 import time
-import requests
 import telebot
 from flask import Flask
+import google.generativeai as genai
 
 TELEGRAM_TOKEN = "8662812194:AAHQcaN89G9vv8uQNWpiSjgCJuAwWMwg4ns"
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+
+genai.configure(api_key=GEMINI_API_KEY)
+model = genai.GenerativeModel("gemini-1.5-flash")
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
@@ -19,30 +22,6 @@ Duk lokacin da mai amfani ya aiko da ma'ana ko jigon wakar da yake so:
 2. Ka ba shi Music Style Prompt (a Turanci) wanda zai kora a Suno AI ko Udio.
 3. Yi magana cikin girmamawa da sigar kwararren Studio Producer a cikin Hausa.
 """
-
-# List din komai don auto-fallback
-MODELS_TO_TRY = [
-    "gemini-1.5-flash",
-    "gemini-1.5-pro",
-    "gemini-2.0-flash",
-    "gemini-2.5-flash"
-]
-
-def query_gemini(prompt_text):
-    for model_name in MODELS_TO_TRY:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
-        payload = {
-            "contents": [{"parts": [{"text": prompt_text}]}]
-        }
-        headers = {'Content-Type': 'application/json'}
-        try:
-            res = requests.post(url, json=payload, headers=headers, timeout=20)
-            res_data = res.json()
-            if "candidates" in res_data and len(res_data["candidates"]) > 0:
-                return res_data["candidates"][0]["content"]["parts"][0]["text"]
-        except Exception:
-            continue
-    return None
 
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
@@ -60,13 +39,16 @@ def send_welcome(message):
 def generate_music_content(message):
     bot.send_chat_action(message.chat.id, 'typing')
     user_prompt = message.text
-    full_prompt = f"{STUDIO_PROMPT}\n\nUser Request: {user_prompt}"
 
-    reply = query_gemini(full_prompt)
-    if reply:
-        bot.reply_to(message, reply)
-    else:
-        bot.reply_to(message, "An samu matsala wajen samun amsa daga Gemini API. Tabbatar API key dinka tana nan a Render Environment.")
+    try:
+        full_prompt = f"{STUDIO_PROMPT}\n\nUser request: {user_prompt}"
+        response = model.generate_content(full_prompt)
+        if response.text:
+            bot.reply_to(message, response.text)
+        else:
+            bot.reply_to(message, "Ba a samu sakamako ba. Sake gwada aikawa.")
+    except Exception as e:
+        bot.reply_to(message, f"Matsala ta faru: {str(e)}")
 
 def run_bot():
     while True:
