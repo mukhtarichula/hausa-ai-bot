@@ -1,15 +1,16 @@
 import os
 import threading
 import time
-import requests
 import telebot
 from flask import Flask
+from google import genai
 
-# Token & Key
+# Keys
 TELEGRAM_TOKEN = "8662812194:AAHQcaN89G9vv8uQNWpiSjgCJuAwWMwg4ns"
 GEMINI_API_KEY = "AIzaSyDwuD4RYY8mUJ1mCEWAPRItVG-bystuRVw"
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 STUDIO_PROMPT = """
 Kai kwararren mawaki ne kuma mai sarrafa kida (Music Producer/Lyricist) a HAUSA AI STUDIO. 
@@ -38,39 +39,34 @@ def generate_music_content(message):
     bot.send_chat_action(message.chat.id, 'typing')
     user_prompt = message.text
 
-    # Google Gemini REST API v1beta
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
-    
-    payload = {
-        "contents": [
-            {
-                "role": "user",
-                "parts": [
-                    {"text": f"{STUDIO_PROMPT}\n\nUser Request: {user_prompt}"}
-                ]
-            }
-        ]
-    }
-    
-    headers = {'Content-Type': 'application/json'}
-
     try:
-        response = requests.post(url, json=payload, headers=headers, timeout=30)
-        res_data = response.json()
-        
-        if "candidates" in res_data and len(res_data["candidates"]) > 0:
-            ai_reply = res_data["candidates"][0]["content"]["parts"][0]["text"]
-            bot.reply_to(message, ai_reply)
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=f"{STUDIO_PROMPT}\n\nUser request: {user_prompt}"
+        )
+        if response.text:
+            bot.reply_to(message, response.text)
         else:
-            # Idan an samu Kuskure a amsar API
-            error_msg = res_data.get("error", {}).get("message", "Ba a samu sakamako daga AI ba.")
-            bot.reply_to(message, f"An samu matsala daga AI Server:\n`{error_msg}`", parse_mode="Markdown")
-            
+            bot.reply_to(message, "An samu matsala wajen samun amsa. Sake gwada aikawa.")
     except Exception as e:
-        bot.reply_to(message, f"An samu matsala ta haɗin yanar gizo (Connection error). Sake gwada aikawa.")
+        bot.reply_to(message, f"Matsala ta faru: {str(e)}")
 
 def run_bot():
     try:
         bot.remove_webhook()
         time.sleep(1)
     except Exception:
+        pass
+    bot.infinity_polling(skip_pending=True)
+
+threading.Thread(target=run_bot, daemon=True).start()
+
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Hausa AI Music Studio Bot Yana Aiki!"
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
