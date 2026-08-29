@@ -1,10 +1,10 @@
 import os
 import threading
+import time
 import requests
 import telebot
 from flask import Flask
 
-# Sirrin aikace-aikace
 TELEGRAM_TOKEN = "8662812194:AAHQcaN89G9vv8uQNWpiSjgCJuAwWMwg4ns"
 GEMINI_API_KEY = "AIzaSyDwuD4RYY8mUJ1mCEWAPRItVG-bystuRVw"
 
@@ -60,7 +60,10 @@ def generate_music_content(message):
         bot.reply_to(message, "An samu matsala ta connection. Sake gwada aikawa.")
 
 def run_bot():
-    bot.infinity_polling(skip_pending=True)
+    # Cire tsoffin requests don hana rigimar Error 409
+    bot.remove_webhook()
+    time.sleep(1)
+    bot.infinity_polling(skip_pending=True, timeout=20, long_polling_timeout=20)
 
 threading.Thread(target=run_bot, daemon=True).start()
 
