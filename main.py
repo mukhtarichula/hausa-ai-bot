@@ -5,6 +5,7 @@ import requests
 import telebot
 from flask import Flask
 
+# Token & Key
 TELEGRAM_TOKEN = "8662812194:AAHQcaN89G9vv8uQNWpiSjgCJuAwWMwg4ns"
 GEMINI_API_KEY = "AIzaSyDwuD4RYY8mUJ1mCEWAPRItVG-bystuRVw"
 
@@ -37,12 +38,18 @@ def generate_music_content(message):
     bot.send_chat_action(message.chat.id, 'typing')
     user_prompt = message.text
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
+    # Google Gemini REST API v1beta
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
     
     payload = {
-        "contents": [{
-            "parts": [{"text": f"{STUDIO_PROMPT}\n\nUser request: {user_prompt}"}]
-        }]
+        "contents": [
+            {
+                "role": "user",
+                "parts": [
+                    {"text": f"{STUDIO_PROMPT}\n\nUser Request: {user_prompt}"}
+                ]
+            }
+        ]
     }
     
     headers = {'Content-Type': 'application/json'}
@@ -53,16 +60,21 @@ def generate_music_content(message):
         
         if "candidates" in res_data and len(res_data["candidates"]) > 0:
             ai_reply = res_data["candidates"][0]["content"]["parts"][0]["text"]
-            bot.reply_to(message, ai_reply, parse_mode="Markdown")
+            bot.reply_to(message, ai_reply)
         else:
-            bot.reply_to(message, "An samu matsala wajen samun amsa daga AI. Da fatan zaka sake aikawa.")
-    except Exception:
-        bot.reply_to(message, "An samu matsala ta connection. Sake gwada aikawa.")
+            # Idan an samu Kuskure a amsar API
+            error_msg = res_data.get("error", {}).get("message", "Ba a samu sakamako daga AI ba.")
+            bot.reply_to(message, f"An samu matsala daga AI Server:\n`{error_msg}`", parse_mode="Markdown")
+            
+    except Exception as e:
+        bot.reply_to(message, f"An samu matsala ta haɗin yanar gizo (Connection error). Sake gwada aikawa.")
 
 def run_bot():
-    # Cire tsoffin requests don hana rigimar Error 409
-    bot.remove_webhook()
-    time.sleep(1)
+    try:
+        bot.remove_webhook()
+        time.sleep(1)
+    except Exception:
+        pass
     bot.infinity_polling(skip_pending=True, timeout=20, long_polling_timeout=20)
 
 threading.Thread(target=run_bot, daemon=True).start()
