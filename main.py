@@ -74,17 +74,3 @@ def run_bot():
         bot.remove_webhook()
         time.sleep(1)
     except Exception:
-        pass
-    bot.infinity_polling(skip_pending=True, timeout=20, long_polling_timeout=20)
-
-threading.Thread(target=run_bot, daemon=True).start()
-
-app = Flask(__name__)
-
-@app.route('/')
-def home():
-    return "Hausa AI Music Studio Bot Yana Aiki!"
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
