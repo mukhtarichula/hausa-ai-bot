@@ -29,11 +29,7 @@ def apply_highpass(data, rate, cutoff=100):
 
 def clean_audio_data(input_wav, output_wav):
     rate, data = wavfile.read(input_wav)
-    
-    # 1. High-pass filter don yanke hayaniyar iska mai zurfi (< 100Hz)
     hp_data = apply_highpass(data, rate, cutoff=100)
-    
-    # 2. Advanced noise reduction
     denoised_data = nr.reduce_noise(
         y=hp_data, 
         sr=rate, 
@@ -41,25 +37,19 @@ def clean_audio_data(input_wav, output_wav):
         stationary=True,
         n_fft=1024
     )
-    
     wavfile.write(output_wav, rate, np.int16(denoised_data))
 
 def apply_studio_effects(input_wav, output_wav, add_reverb=True):
-    # Fara goge tsawa da iska
     temp_clean = f"{output_wav}_temp.wav"
     clean_audio_data(input_wav, temp_clean)
     
     sound = AudioSegment.from_wav(temp_clean)
-    
-    # Compress & Equalize (Don muryar ta fito radau kamar rediyo)
     sound = effects.compress_dynamic_range(sound, threshold=-20.0, ratio=4.0)
     
     if add_reverb:
-        # Echo / Reverb mai sauti mai daɗi
         echo = sound - 8
         sound = sound.overlay(echo, position=120)
     
-    # Normalize Volume (Daidaita ƙarfi)
     final_sound = sound.normalize()
     final_sound.export(output_wav, format="wav")
     
@@ -67,8 +57,9 @@ def apply_studio_effects(input_wav, output_wav, add_reverb=True):
         os.remove(temp_clean)
 
 @app.route('/')
+@app.route('/ping')
 def home():
-    return "Hausa AI Music Studio Bot Yana Aiki!"
+    return "OK", 200
 
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
@@ -156,7 +147,7 @@ def callback_query(call):
     song_title = user_data[chat_id].get('song_title', 'Hausa AI Track')
     
     if call.data == "process_master":
-        bot.send_message(chat_id, "🎛️ **Ina gudanar da FULL MASTERING (Cire Iska + Studio Compression + Echo)...**", parse_mode="Markdown")
+        bot.send_message(chat_id, "🎛️ **Ina gudanar da FULL MASTERING...**", parse_mode="Markdown")
         try:
             apply_studio_effects(input_wav, output_wav, add_reverb=True)
             with open(output_wav, 'rb') as audio_out:
@@ -201,17 +192,19 @@ def callback_query(call):
         except Exception as e:
             bot.send_message(chat_id, f"Matsala ta faru: {str(e)}")
 
-def run_bot():
-    time.sleep(3)
+def start_bot():
     while True:
         try:
             bot.remove_webhook()
             time.sleep(1)
-            bot.polling(none_stop=True, interval=2, timeout=20)
+            bot.infinity_polling(timeout=10, long_polling_timeout=5)
         except Exception:
-            time.sleep(5)
+            time.sleep(3)
 
 if __name__ == "__main__":
-    threading.Thread(target=run_bot, daemon=True).start()
+    t = threading.Thread(target=start_bot)
+    t.daemon = True
+    t.start()
+    
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
