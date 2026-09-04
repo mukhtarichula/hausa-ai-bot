@@ -4,83 +4,97 @@ import time
 import telebot
 from telebot import types
 from flask import Flask
+from pydub import AudioSegment
+import noisereduce as nr
+import numpy as np
+import scipy.io.wavfile as wavfile
 
 TELEGRAM_TOKEN = "8662812194:AAHQcaN89G9vv8uQNWpiSjgCJuAwWMwg4ns"
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
-# Dictionary don adana yanayin kowane mai amfani (User State)
-user_sessions = {}
+user_files = {}
 
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
     chat_id = message.chat.id
-    user_sessions[chat_id] = {"mode": "idle"}
     
     markup = types.InlineKeyboardMarkup(row_width=2)
     btn_record = types.InlineKeyboardButton("🎙️ Aiko Muryar Waka", callback_data="mode_record")
-    btn_beats = types.InlineKeyboardButton("🥁 Zaɓi Salon Kiɗa", callback_data="mode_beats")
     btn_effects = types.InlineKeyboardButton("🎛️ Studio Effects", callback_data="mode_effects")
-    btn_speed = types.InlineKeyboardButton("⚡ Sauri & Tempo", callback_data="mode_speed")
-    btn_stem = types.InlineKeyboardButton("✂️ Raba Muryar & Kiɗa", callback_data="mode_stem")
-    btn_master = types.InlineKeyboardButton("🥼 AI Mastering", callback_data="mode_master")
+    btn_beats = types.InlineKeyboardButton("🥁 Zaɓi Beat", callback_data="mode_beats")
+    btn_speed = types.InlineKeyboardButton("⚡ Sauya Sauri", callback_data="mode_speed")
     
-    markup.add(btn_record, btn_beats, btn_effects, btn_speed, btn_stem, btn_master)
+    markup.add(btn_record, btn_effects, btn_beats, btn_speed)
     
     welcome_msg = (
         "🎧 **Barka da zuwa HAUSA AI MUSIC STUDIO!** 🎧\n\n"
-        "Wannan bot shi ne cikakken Digital Audio Workstation (DAW) dinka na Telegram.\n\n"
-        "Za ka iya:\n"
-        "• Aiko muryarka a yi mata record da gyara.\n"
-        "• Saka kiɗa a bayan muryar ka (Beat Integration).\n"
-        "• Saka Auto-Tune, Reverb, Echo & Cire Tsawa (Noise Removal).\n"
-        "• Sauya saurin waƙa da raba murya da kiɗa.\n\n"
-        " Zaɓi abin da kake so ka yi a maɓallan da ke ƙasa:"
+        "Za ka iya aiko muryarka don gogewa, saka Reverb, cire tsawa, ko sanya kiɗa.\n\n"
+        "Zaɓi abin da kake so ka yi a maɓallan ƙasa:"
     )
     bot.reply_to(message, welcome_msg, reply_markup=markup, parse_mode="Markdown")
+
+@bot.message_handler(content_types=['voice', 'audio'])
+def handle_audio(message):
+    chat_id = message.chat.id
+    bot.send_message(chat_id, "📥 **Ina saukewa da adana muryarka...**")
+    
+    file_info = bot.get_file(message.voice.file_id if message.voice else message.audio.file_id)
+    downloaded_file = bot.download_file(file_info.file_path)
+    
+    input_path = f"user_{chat_id}_input.ogg"
+    wav_path = f"user_{chat_id}_input.wav"
+    
+    with open(input_path, 'wb') as new_file:
+        new_file.write(downloaded_file)
+        
+    # Maida OGG/MP3 zuwa WAV don sauƙin sarrafawa
+    sound = AudioSegment.from_file(input_path)
+    sound.export(wav_path, format="wav")
+    
+    user_files[chat_id] = wav_path
+    
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    e1 = types.InlineKeyboardButton("🔇 Cire Tsawa (Denoise)", callback_data="process_denoise")
+    e2 = types.InlineKeyboardButton("🌊 Echo / Reverb", callback_data="process_reverb")
+    e3 = types.InlineKeyboardButton("🔊 Normalize Volume", callback_data="process_normalize")
+    markup.add(e1, e2, e3)
+    
+    bot.send_message(chat_id, "✅ **An adana muryar taka!** Zabi abin da kake so a yi mata:", reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: True)
 def callback_query(call):
     chat_id = call.message.chat.id
     
-    if call.data == "mode_record":
-        bot.answer_callback_query(call.id, "Aiko muryar ka yanzu!")
-        bot.send_message(chat_id, "🎙️ **Tura muryarka (Voice Message ko Audio file):**\nBot ɗin zai karɓa ya adana don sarrafawa.")
+    if chat_id not in user_files:
+        bot.answer_callback_query(call.id, "Da fatan za ka aiko da muryar ka tukuna!")
+        return
         
-    elif call.data == "mode_beats":
-        markup = types.InlineKeyboardMarkup(row_width=2)
-        b1 = types.InlineKeyboardButton("🔥 Afrobeat", callback_data="beat_afro")
-        b2 = types.InlineKeyboardButton("🎹 Amapiano", callback_data="beat_ama")
-        b3 = types.InlineKeyboardButton("🎤 Trap / Drill", callback_data="beat_trap")
-        b4 = types.InlineKeyboardButton("💃 Reggaeton", callback_data="beat_reggae")
-        markup.add(b1, b2, b3, b4)
-        bot.edit_message_text("🥁 **Zaɓi salon kiɗan da kake so a saka wa muryarka:**", chat_id, call.message.message_id, reply_markup=markup)
-        
-    elif call.data == "mode_effects":
-        markup = types.InlineKeyboardMarkup(row_width=2)
-        e1 = types.InlineKeyboardButton("🎤 Auto-Tune", callback_data="fx_autotune")
-        e2 = types.InlineKeyboardButton("🌊 Reverb & Echo", callback_data="fx_reverb")
-        e3 = types.InlineKeyboardButton("🔇 Cire Tsawa (Noise Removal)", callback_data="fx_denoise")
-        e4 = types.InlineKeyboardButton("🗣️ Voice Converter", callback_data="fx_voice")
-        markup.add(e1, e2, e3, e4)
-        bot.edit_message_text("🎛️ **Zaɓi Studio Effect ɗin da kake so ka sanya:**", chat_id, call.message.message_id, reply_markup=markup)
+    input_wav = user_files[chat_id]
+    output_wav = f"user_{chat_id}_output.wav"
+    
+    if call.data == "process_denoise":
+        bot.send_message(chat_id, "⚙️ **Ina goge tsawa da hayaniyar baya...**")
+        try:
+            rate, data = wavfile.read(input_wav)
+            reduced_noise = nr.reduce_noise(y=data, sr=rate)
+            wavfile.write(output_wav, rate, reduced_noise)
+            
+            with open(output_wav, 'rb') as audio_out:
+                bot.send_audio(chat_id, audio_out, caption="✨ **Gashi nan an cire tsawa da hayaniyar baya!**")
+        except Exception as e:
+            bot.send_message(chat_id, f"Matsala ta faru wajen cire tsawa: {str(e)}")
 
-    elif call.data == "mode_speed":
-        bot.answer_callback_query(call.id, "Kayan aikin Sauri na zuwa!")
-        bot.send_message(chat_id, "⚡ **Gudun Waƙa (Tempo & Speed):** Zai ba ka damar saurin waƙar ko rage mata sauri daidai da kiɗa.")
-
-    elif call.data == "mode_stem":
-        bot.answer_callback_query(call.id, "Stems Splitter!")
-        bot.send_message(chat_id, "✂️ **Raba Waƙa:** Aiko cikakkiyar waƙa don raba muryar maƙa daban, kiɗa daban.")
-
-    elif call.data == "mode_master":
-        bot.answer_callback_query(call.id, "AI Mastering!")
-        bot.send_message(chat_id, "🥼 **AI Mastering:** Tace sautin waƙarka ta koma mai ƙarfi da tsafta kamar ta Studio.")
-
-# Karɓar fayil ɗin sauti ko murya daga mai amfani
-@bot.message_handler(content_types=['voice', 'audio'])
-def handle_audio(message):
-    chat_id = message.chat.id
-    bot.send_message(chat_id, "📥 **An sami fayil ɗin sauti!** Ina shirin sarrafa muryar taka...")
+    elif call.data == "process_normalize":
+        bot.send_message(chat_id, "⚙️ **Ina daidaita ƙarfin saurin muryar ka...**")
+        try:
+            sound = AudioSegment.from_wav(input_wav)
+            normalized_sound = sound.normalize()
+            normalized_sound.export(output_wav, format="wav")
+            
+            with open(output_wav, 'rb') as audio_out:
+                bot.send_audio(chat_id, audio_out, caption="🔊 **Gashi nan an daidaita ƙarfin sautin muryar ka!**")
+        except Exception as e:
+            bot.send_message(chat_id, f"Matsala ta faru: {str(e)}")
 
 def run_bot():
     while True:
