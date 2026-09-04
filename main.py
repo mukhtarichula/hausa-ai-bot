@@ -4,7 +4,7 @@ import time
 import telebot
 from telebot import types
 from flask import Flask
-from pydub import AudioSegment
+from pydub import AudioSegment, effects
 import noisereduce as nr
 import numpy as np
 import scipy.io.wavfile as wavfile
@@ -16,12 +16,55 @@ bot = telebot.TeleBot(TELEGRAM_TOKEN, threaded=False)
 app = Flask(__name__)
 user_data = {}
 
-def highpass_filter(data, cutoff=80, fs=44100, order=5):
-    nyq = 0.5 * fs
+def apply_highpass(data, rate, cutoff=100):
+    nyq = 0.5 * rate
     normal_cutoff = cutoff / nyq
-    b, a = butter(order, normal_cutoff, btype='high', analog=False)
-    y = lfilter(b, a, data)
-    return y
+    b, a = butter(5, normal_cutoff, btype='high', analog=False)
+    if len(data.shape) > 1:
+        y = np.zeros_like(data)
+        for i in range(data.shape[1]):
+            y[:, i] = lfilter(b, a, data[:, i])
+        return y
+    return lfilter(b, a, data)
+
+def clean_audio_data(input_wav, output_wav):
+    rate, data = wavfile.read(input_wav)
+    
+    # 1. High-pass filter don yanke hayaniyar iska mai zurfi (< 100Hz)
+    hp_data = apply_highpass(data, rate, cutoff=100)
+    
+    # 2. Advanced noise reduction
+    denoised_data = nr.reduce_noise(
+        y=hp_data, 
+        sr=rate, 
+        prop_decrease=0.85, 
+        stationary=True,
+        n_fft=1024
+    )
+    
+    wavfile.write(output_wav, rate, np.int16(denoised_data))
+
+def apply_studio_effects(input_wav, output_wav, add_reverb=True):
+    # Fara goge tsawa da iska
+    temp_clean = f"{output_wav}_temp.wav"
+    clean_audio_data(input_wav, temp_clean)
+    
+    sound = AudioSegment.from_wav(temp_clean)
+    
+    # Compress & Equalize (Don muryar ta fito radau kamar rediyo)
+    sound = effects.compress_dynamic_range(sound, threshold=-20.0, ratio=4.0)
+    
+    if add_reverb:
+        # Echo / Reverb mai sauti mai daɗi
+        echo = sound - 8
+        sound = sound.overlay(echo, position=120)
+    
+    # Normalize Volume (Daidaita ƙarfi)
+    final_sound = sound.normalize()
+    final_sound.export(output_wav, format="wav")
+    
+    if os.path.exists(temp_clean):
+        os.remove(temp_clean)
 
 @app.route('/')
 def home():
@@ -32,16 +75,13 @@ def send_welcome(message):
     chat_id = message.chat.id
     user_data[chat_id] = {'state': 'idle'}
     
-    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup = types.InlineKeyboardMarkup(row_width=1)
     btn_record = types.InlineKeyboardButton("🎙️ Aiko Muryar Waka", callback_data="mode_record")
-    btn_effects = types.InlineKeyboardButton("🎛️ Studio Effects", callback_data="mode_effects")
-    btn_beats = types.InlineKeyboardButton("🥁 Zaɓi Beat", callback_data="mode_beats")
-    markup.add(btn_record, btn_effects, btn_beats)
+    markup.add(btn_record)
     
     welcome_msg = (
         "🎧 **Barka da zuwa HAUSA AI MUSIC STUDIO!** 🎧\n\n"
-        "Za ka iya aiko muryarka don gogewa tsaf, saka Reverb, cire tsawa & iska, ko sanya sunan waƙa da kanka.\n\n"
-        "Zaɓi abin da kake so ka yi a maɓallan ƙasa:"
+        "Aiko muryarka yanzu domin yi mata **Mastering** na kwararru (Cire Iska + Reverb + Daidaita Ƙarfi) lokaci guda."
     )
     bot.reply_to(message, welcome_msg, reply_markup=markup, parse_mode="Markdown")
 
@@ -87,16 +127,16 @@ def handle_text(message):
             
         user_data[chat_id]['state'] = 'ready'
         
-        markup = types.InlineKeyboardMarkup(row_width=2)
-        e1 = types.InlineKeyboardButton("🔇 Cire Iska & Tsawa", callback_data="process_denoise")
-        e2 = types.InlineKeyboardButton("🌊 Echo / Reverb", callback_data="process_reverb")
-        e3 = types.InlineKeyboardButton("🔊 Normalize Volume", callback_data="process_normalize")
-        markup.add(e1, e2, e3)
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        e_master = types.InlineKeyboardButton("🎛️ FULL STUDIO MASTER (Gaba Ɗaya)", callback_data="process_master")
+        e_denoise = types.InlineKeyboardButton("🔇 Cire Iska & Tsawa Kawai", callback_data="process_denoise")
+        e_reverb = types.InlineKeyboardButton("🌊 Echo / Reverb Kawai", callback_data="process_reverb")
+        markup.add(e_master, e_denoise, e_reverb)
         
         title = user_data[chat_id]['song_title']
         bot.send_message(
             chat_id, 
-            f"✅ **An saita sunan waƙa zuwa:** `{title}`\n\nYanzu zaɓi abin da kake so a yi wa muryar:", 
+            f"✅ **An saita sunan waƙa zuwa:** `{title}`\n\nZaɓi tsarin gyaran da kake so:", 
             reply_markup=markup, 
             parse_mode="Markdown"
         )
@@ -115,28 +155,30 @@ def callback_query(call):
     output_wav = f"user_{chat_id}_output.wav"
     song_title = user_data[chat_id].get('song_title', 'Hausa AI Track')
     
-    if call.data == "process_denoise":
+    if call.data == "process_master":
+        bot.send_message(chat_id, "🎛️ **Ina gudanar da FULL MASTERING (Cire Iska + Studio Compression + Echo)...**", parse_mode="Markdown")
+        try:
+            apply_studio_effects(input_wav, output_wav, add_reverb=True)
+            with open(output_wav, 'rb') as audio_out:
+                bot.send_audio(
+                    chat_id, audio_out, 
+                    caption=f"🔥 **Gashi nan an kammala Full Studio Master!**\n🎵 **Waƙa:** {song_title}",
+                    title=song_title, performer="Hausa AI Studio", parse_mode="Markdown"
+                )
+        except Exception as e:
+            bot.send_message(chat_id, f"Matsala ta faru: {str(e)}")
+
+    elif call.data == "process_denoise":
         bot.send_message(chat_id, "⚙️ **Ina goge iska da tsawar baya...**", parse_mode="Markdown")
         try:
-            rate, data = wavfile.read(input_wav)
-            if len(data.shape) > 1:
-                filtered_data = np.zeros_like(data)
-                for i in range(data.shape[1]):
-                    filtered_data[:, i] = highpass_filter(data[:, i], cutoff=80, fs=rate)
-            else:
-                filtered_data = highpass_filter(data, cutoff=80, fs=rate)
-            
-            reduced_noise = nr.reduce_noise(y=filtered_data, sr=rate, prop_decrease=0.95, stationary=False)
-            wavfile.write(output_wav, rate, np.int16(reduced_noise))
-            
-            sound = AudioSegment.from_wav(output_wav)
-            normalized_sound = sound.normalize()
-            normalized_sound.export(output_wav, format="wav")
+            clean_audio_data(input_wav, output_wav)
+            sound = AudioSegment.from_wav(output_wav).normalize()
+            sound.export(output_wav, format="wav")
             
             with open(output_wav, 'rb') as audio_out:
                 bot.send_audio(
                     chat_id, audio_out, 
-                    caption=f"✨ **Gashi nan an goge iska da tsawa!**\n🎵 **Waƙa:** {song_title}",
+                    caption=f"✨ **Gashi nan an cire iska da tsawa!**\n🎵 **Waƙa:** {song_title}",
                     title=song_title, performer="Hausa AI Studio", parse_mode="Markdown"
                 )
         except Exception as e:
@@ -146,31 +188,14 @@ def callback_query(call):
         bot.send_message(chat_id, "🌊 **Ina sanya Reverb & Echo...**", parse_mode="Markdown")
         try:
             sound = AudioSegment.from_wav(input_wav)
-            echo_delay = 150
-            echo = sound - 6
-            combined = sound.overlay(echo, position=echo_delay)
+            echo = sound - 8
+            combined = sound.overlay(echo, position=120).normalize()
             combined.export(output_wav, format="wav")
             
             with open(output_wav, 'rb') as audio_out:
                 bot.send_audio(
                     chat_id, audio_out, 
                     caption=f"✨ **Gashi nan an sanya Reverb!**\n🎵 **Waƙa:** {song_title}",
-                    title=song_title, performer="Hausa AI Studio", parse_mode="Markdown"
-                )
-        except Exception as e:
-            bot.send_message(chat_id, f"Matsala ta faru: {str(e)}")
-
-    elif call.data == "process_normalize":
-        bot.send_message(chat_id, "🔊 **Ina daidaita ƙarfin sauti...**", parse_mode="Markdown")
-        try:
-            sound = AudioSegment.from_wav(input_wav)
-            normalized_sound = sound.normalize()
-            normalized_sound.export(output_wav, format="wav")
-            
-            with open(output_wav, 'rb') as audio_out:
-                bot.send_audio(
-                    chat_id, audio_out, 
-                    caption=f"🔊 **Gashi nan an daidaita ƙarfin sauti!**\n🎵 **Waƙa:** {song_title}",
                     title=song_title, performer="Hausa AI Studio", parse_mode="Markdown"
                 )
         except Exception as e:
