@@ -1,7 +1,5 @@
-
 pyTelegramBotAPI
 flask
-gunicorn
 pydub
 librosa
 soundfile
