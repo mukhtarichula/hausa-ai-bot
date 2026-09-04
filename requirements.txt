@@ -1,7 +1,7 @@
 pyTelegramBotAPI
 flask
 pydub
-librosa
+google-generativeai
 soundfile
 noisereduce
 scipy
