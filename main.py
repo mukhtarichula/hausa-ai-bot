@@ -1,6 +1,7 @@
 import os
 import threading
 import time
+import numpy as np
 import telebot
 from telebot import types
 from flask import Flask
@@ -17,34 +18,55 @@ user_data = {}
 def home():
     return "OK", 200
 
+def remove_background_noise(sound):
+    """Deep Spectral Noise Gate for Clean Voice Clarity"""
+    samples = np.array(sound.get_array_of_samples(), dtype=np.float32)
+    
+    if sound.channels == 2:
+        samples = samples.reshape((-1, 2))
+        
+    # An saita matakin threshold don goge surutun baya
+    threshold = np.max(np.abs(samples)) * 0.035
+    
+    # Rage karfin amsawa na sauti idan ya yi kasa da threshold
+    mask = np.abs(samples) > threshold
+    cleaned_samples = samples * mask
+    
+    cleaned_samples = cleaned_samples.astype(np.int16)
+    return sound._spawn(cleaned_samples.tobytes())
+
 def process_full_master(input_path, output_path):
     # 1. Loda fayil din sauti
     sound = AudioSegment.from_file(input_path)
     
-    # 2. Cire Iska da Tsawa (High-Pass & Low-Pass Studio Filters)
-    # Yanke duk wata iska mai zurfi (low rumble below 130Hz)
-    clean_sound = sound.high_pass_filter(130)
-    # Yanke dogon squeak ko buzzing na sama (above 8000Hz)
-    clean_sound = clean_sound.low_pass_filter(8000)
+    # 2. Goge Hayaniyar Bango & Surutu (Spectral Noise Gate)
+    clean_sound = remove_background_noise(sound)
     
-    # 3. Dynamic Range Compression (Equalization na Studio)
+    # 3. Yanke Low-End Noise (Air Conditioning / Mic Hum / Wind)
+    clean_sound = clean_sound.high_pass_filter(150)
+    
+    # 4. Injin Qara Sheki da Tsarki ga Murya (Vocal Presence Boosting)
+    # Wannan yana Kara haske da feshin murya (High Shelf Boost around 3kHz-6kHz)
+    clean_sound = clean_sound.low_pass_filter(7500)
+    
+    # 5. Dynamic Compression (Yalwata Murya & Daidaita Nauyinta)
     compressed = effects.compress_dynamic_range(
         clean_sound, 
-        threshold=-16.0, 
-        ratio=4.0, 
-        attack=5.0, 
-        release=50.0
+        threshold=-18.0, 
+        ratio=3.5, 
+        attack=3.0, 
+        release=40.0
     )
     
-    # 4. Adding Warm Studio Reverb & Spatial Echo
-    echo = compressed - 7
-    mastered = compressed.overlay(echo, position=90)
+    # 6. Smooth Studio Reverb & Spatial Echo Effect
+    echo = compressed - 10
+    mastered = compressed.overlay(echo, position=70)
     
-    # 5. Volume Loudness Normalization
+    # 7. Final Loudness Normalization (Loud & Crisp Studio Audio)
     final_output = mastered.normalize()
     
-    # Fitar da fayil din mp3 mai inganci
-    final_output.export(output_path, format="mp3", bitrate="192k")
+    # Fitar da fayil din a ingancin Studio MP3 (320kbps)
+    final_output.export(output_path, format="mp3", bitrate="320k")
 
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
@@ -57,14 +79,14 @@ def send_welcome(message):
     
     welcome_msg = (
         "🎧 **HAUSA AI MUSIC STUDIO** 🎧\n\n"
-        "Barka da zuwa! Aiko muryarka yanzu domin gudanar da **Full Studio Master** (Noise Cut + Studio Equalizer + Reverb)."
+        "Barka da zuwa! Aiko muryarka yanzu domin gudanar da **Studio Noise Gate & Voice Enhancer**."
     )
     bot.send_message(chat_id, welcome_msg, reply_markup=markup, parse_mode="Markdown")
 
 @bot.message_handler(content_types=['voice', 'audio'])
 def handle_audio(message):
     chat_id = message.chat.id
-    bot.send_message(chat_id, "📥 **Ina saukewa da adana muryarka...**", parse_mode="Markdown")
+    bot.send_message(chat_id, "📥 **Ina saukewa da sarrafa muryarka...**", parse_mode="Markdown")
     
     try:
         file_info = bot.get_file(message.voice.file_id if message.voice else message.audio.file_id)
@@ -131,7 +153,7 @@ def callback_query(call):
             bot.send_message(chat_id, "🎙️ **Yi rikodin muryarka ka turo min yanzu!**", parse_mode="Markdown")
             return
             
-        bot.send_message(chat_id, "🎛️ **Ina gudanar da Studio Mastering & Voice Enhancement...**", parse_mode="Markdown")
+        bot.send_message(chat_id, "🎛️ **Ina gudanar da Studio Noise Gate & Deep Enhancement...**", parse_mode="Markdown")
         try:
             process_full_master(input_wav, output_mp3)
             
@@ -145,7 +167,6 @@ def callback_query(call):
                     parse_mode="Markdown"
                 )
             
-            # Tsaftace fayilolin da aka yi amfani da su
             if os.path.exists(input_wav): os.remove(input_wav)
             if os.path.exists(output_mp3): os.remove(output_mp3)
 
