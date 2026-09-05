@@ -1,8 +1,6 @@
+
 pyTelegramBotAPI
 flask
 pydub
-google-generativeai
-soundfile
-noisereduce
-scipy
-numpy
+gradio_client
+requests
