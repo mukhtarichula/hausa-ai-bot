@@ -1,18 +1,12 @@
 import os
 import threading
 import time
-import requests
 import telebot
 from telebot import types
 from flask import Flask
 from pydub import AudioSegment, effects
 
 TELEGRAM_TOKEN = "8662812194:AAHQcaN89G9vv8uQNWpiSjgCJuAwWMwg4ns"
-HUGGINGFACE_TOKEN = "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"
-
-# Model na AI goge hayaniya daga Hugging Face
-HF_API_URL = "https://api-inference.huggingface.co/models/JorisCos/DCCRNet_TAC_Libri1Mix_enhance"
-headers = {"Authorization": f"Bearer {HUGGINGFACE_TOKEN}"}
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 app = Flask(__name__)
@@ -23,59 +17,34 @@ user_data = {}
 def home():
     return "OK", 200
 
-def denoise_with_ai(input_file, output_file):
-    """Gudanar da AI Noise Suppression ta Hugging Face API"""
-    with open(input_file, "rb") as f:
-        data = f.read()
-    
-    response = requests.post(HF_API_URL, headers=headers, data=data)
-    
-    # Idan AI model din yana cikin bootup (503), za mu jira sakan kadan mu sake gwadawa
-    if response.status_code == 503:
-        time.sleep(8)
-        response = requests.post(HF_API_URL, headers=headers, data=data)
-
-    if response.status_code == 200:
-        with open(output_file, "wb") as f:
-            f.write(response.content)
-        return True
-    else:
-        return False
-
 def process_full_master(input_path, output_path):
-    temp_ai_clean = f"{input_path}_aiclean.wav"
+    # 1. Loda fayil din sauti
+    sound = AudioSegment.from_file(input_path)
     
-    # 1. AI Noise Suppression (Goge tsawa da iska)
-    success = denoise_with_ai(input_path, temp_ai_clean)
+    # 2. Cire Iska da Tsawa (High-Pass & Low-Pass Studio Filters)
+    # Yanke duk wata iska mai zurfi (low rumble below 130Hz)
+    clean_sound = sound.high_pass_filter(130)
+    # Yanke dogon squeak ko buzzing na sama (above 8000Hz)
+    clean_sound = clean_sound.low_pass_filter(8000)
     
-    # Idan API din bai amsa ba, za mu amfani da ainihin sound din don kar tsarin ya tsaya
-    file_to_process = temp_ai_clean if (success and os.path.exists(temp_ai_clean)) else input_path
-    
-    sound = AudioSegment.from_file(file_to_process)
-    
-    # 2. Dynamic High-Pass Filter
-    clean_sound = sound.high_pass_filter(100)
-    
-    # 3. Dynamic Compressor (Broadcast/Studio Equalization)
+    # 3. Dynamic Range Compression (Equalization na Studio)
     compressed = effects.compress_dynamic_range(
         clean_sound, 
-        threshold=-18.0, 
-        ratio=3.5, 
+        threshold=-16.0, 
+        ratio=4.0, 
         attack=5.0, 
         release=50.0
     )
     
-    # 4. Studio Reverb & Echo
-    echo = compressed - 9
-    mastered = compressed.overlay(echo, position=110)
+    # 4. Adding Warm Studio Reverb & Spatial Echo
+    echo = compressed - 7
+    mastered = compressed.overlay(echo, position=90)
     
-    # 5. Volume Normalization
+    # 5. Volume Loudness Normalization
     final_output = mastered.normalize()
-    final_output.export(output_path, format="mp3")
     
-    # Sharar fayilolin wucin gadi
-    if os.path.exists(temp_ai_clean):
-        os.remove(temp_ai_clean)
+    # Fitar da fayil din mp3 mai inganci
+    final_output.export(output_path, format="mp3", bitrate="192k")
 
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
@@ -87,8 +56,8 @@ def send_welcome(message):
     markup.add(btn_record)
     
     welcome_msg = (
-        "🎧 **HAUSA AI MUSIC STUDIO (AI-Powered)** 🎧\n\n"
-        "Aiko muryarka yanzu domin yi mata **Full AI Studio Master** (AI Noise Suppression + Reverb + Compression)."
+        "🎧 **HAUSA AI MUSIC STUDIO** 🎧\n\n"
+        "Barka da zuwa! Aiko muryarka yanzu domin gudanar da **Full Studio Master** (Noise Cut + Studio Equalizer + Reverb)."
     )
     bot.send_message(chat_id, welcome_msg, reply_markup=markup, parse_mode="Markdown")
 
@@ -131,7 +100,7 @@ def handle_text(message):
         user_data[chat_id]['state'] = 'ready'
         
         markup = types.InlineKeyboardMarkup(row_width=1)
-        e_master = types.InlineKeyboardButton("🎛️ FULL STUDIO MASTER (AI Enhanced)", callback_data="process_master")
+        e_master = types.InlineKeyboardButton("🎛️ FULL STUDIO MASTER", callback_data="process_master")
         markup.add(e_master)
         
         title = user_data[chat_id]['song_title']
@@ -162,7 +131,7 @@ def callback_query(call):
             bot.send_message(chat_id, "🎙️ **Yi rikodin muryarka ka turo min yanzu!**", parse_mode="Markdown")
             return
             
-        bot.send_message(chat_id, "🎛️ **Ina gudanar da AI Deep Cleaning & Studio Mastering...**", parse_mode="Markdown")
+        bot.send_message(chat_id, "🎛️ **Ina gudanar da Studio Mastering & Voice Enhancement...**", parse_mode="Markdown")
         try:
             process_full_master(input_wav, output_mp3)
             
@@ -170,11 +139,16 @@ def callback_query(call):
                 bot.send_audio(
                     chat_id, 
                     audio_out, 
-                    caption=f"🔥 **Gashi nan an kammala AI Full Master!**\n🎵 **Waƙa:** {song_title}",
+                    caption=f"🔥 **Gashi nan an kammala Full Studio Master!**\n🎵 **Waƙa:** {song_title}",
                     title=song_title, 
                     performer="Hausa AI Studio", 
                     parse_mode="Markdown"
                 )
+            
+            # Tsaftace fayilolin da aka yi amfani da su
+            if os.path.exists(input_wav): os.remove(input_wav)
+            if os.path.exists(output_mp3): os.remove(output_mp3)
+
         except Exception as e:
             bot.send_message(chat_id, f"Matsala ta faru wajen mastering: {str(e)}")
 
