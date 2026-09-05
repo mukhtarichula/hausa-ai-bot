@@ -20,14 +20,13 @@ def home():
     return "OK", 200
 
 def denoise_with_gradio_ai(input_wav_path):
-    """Injin AI na DeepFilterNet ta amfani da Gradio Client"""
+    """Injin AI na DeepFilterNet wanda ke wanke iska da surutu 100%"""
     try:
         client = Client("fffiloni/DeepFilterNet", hf_token=HUGGINGFACE_TOKEN)
         result = client.predict(
             audio_file_path=handle_file(input_wav_path),
             api_name="/predict"
         )
-        # Result yana dawo da hanyar fayil din da AI ya tsaftace
         if result and os.path.exists(result):
             return result
     except Exception as e:
@@ -35,18 +34,16 @@ def denoise_with_gradio_ai(input_wav_path):
     return None
 
 def process_full_master(input_path, output_path):
-    # 1. Aikata sautin zuwa AI Injin DeepFilterNet
+    # 1. AI Deep Cleaning
     ai_cleaned_file = denoise_with_gradio_ai(input_path)
-    
-    # Idan AI ya yi nasara sai mu amfani da sautin da aka wanke, idan kuma aka samu matsala mu yi amfani da na asali
     source_file = ai_cleaned_file if ai_cleaned_file else input_path
     
     sound = AudioSegment.from_file(source_file)
     
-    # 2. Dynamic High-pass filter don saita sauti
+    # 2. Dynamic High-pass filter
     clean_sound = sound.high_pass_filter(100)
     
-    # 3. Dynamic Compressor (Broadcast Equalization)
+    # 3. Studio Dynamic Compression
     compressed = effects.compress_dynamic_range(
         clean_sound, 
         threshold=-18.0, 
