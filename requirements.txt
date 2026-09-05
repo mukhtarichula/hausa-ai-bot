@@ -1,6 +1,5 @@
-
 pyTelegramBotAPI
 flask
 pydub
-gradio_client
+gradio_client==1.3.0
 requests
